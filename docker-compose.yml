@@ -1,0 +1,106 @@
+version: '3.2'
+
+services:
+  elasticsearch:
+    build:
+      context: elasticsearch/
+      args:
+        ELK_VERSION: $ELK_VERSION
+    volumes:
+      - type: bind
+        source: ./elasticsearch/config/elasticsearch.yml
+        target: /usr/share/elasticsearch/config/elasticsearch.yml
+        read_only: true
+      - type: volume
+        source: elasticsearch
+        target: /usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
+      ELASTIC_PASSWORD: changeme
+      # Use single node discovery in order to disable production mode and avoid bootstrap checks
+      # see https://www.elastic.co/guide/en/elasticsearch/reference/current/bootstrap-checks.html
+      discovery.type: single-node
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.elasticsearch.rule=Host(`elasticsearch.docker.localhost`)"
+      - "traefik.http.routers.elasticsearch.entrypoints=elasticsearch"  
+    networks:
+      - elk     
+
+  reverse-proxy:
+    # https://docs.traefik.io/user-guides/docker-compose/basic-example/
+    # https://community.containo.us/t/traefik-not-writing-log-files/1094
+    image: traefik:latest
+    command:   
+      - --accessLog=true
+      - --log.level=DEBUG
+      - --accessLog.filePath="/var/log/traefik/access.log"
+      - --accessLog.format=json
+      - --api.insecure=true
+      - --providers.docker
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.elasticsearch.address=:9220      
+    ports:
+      - "9220:9200"
+      - "8080:8080"
+      - "80:80"   
+    volumes:
+      # - ./traefik/config/traefik.toml:/etc/traefik/traefik.toml      
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./logs:/var/log/traefik
+    labels:
+      - "traefik.enable=true" 
+   
+    networks:
+      - elk      
+
+  # filebeat:
+  #   build:
+  #     context: filebeat/
+  #     args:
+  #       ELK_VERSION: $ELK_VERSION
+  #   volumes:
+  #     - type: bind
+  #       source: ./filebeat/config/filebeat.yml
+  #       target: /usr/share/filebeat/filebeat.yml
+  #       read_only: true
+  #     - ./logs:/var/log/traefik
+  #     - filebeat:/usr/share/filebeat/data/
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   networks:
+  #     - elk
+  #   depends_on:
+  #     - kibana
+  #   environment:
+  #     - ELASTICSEARCH_HOST=${ELASTICSEARCH_HOST:-elasticsearch}
+  #     - KIBANA_HOST=${KIBANA_HOST:-kibana}
+  #     - ELASTICSEARCH_USERNAME=${ELASTICSEARCH_USERNAME:-elastic}
+  #     - ELASTICSEARCH_PASSWORD=${ELASTICSEARCH_PASSWORD:-changeme} 
+
+  kibana:
+    build:
+      context: kibana/
+      args:
+        ELK_VERSION: $ELK_VERSION  
+    volumes:
+      - type: bind
+        source: ./kibana/config/kibana.yml
+        target: /usr/share/kibana/config/kibana.yml
+        read_only: true
+    ports:
+      - "5601:5601"
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+    
+networks:
+  elk:
+    driver: bridge
+
+volumes:
+  elasticsearch:
+  filebeat:  

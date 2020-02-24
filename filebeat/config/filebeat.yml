@@ -1,0 +1,30 @@
+# traefik logs:
+    filebeat.inputs:
+        - type: log
+          enabled: true
+          paths:
+            - /var/log/traefik/access.log
+            - /var/log/traefik/traefik.log
+          # Parse json log:
+          fields_under_root: true
+          json.keys_under_root: true
+          json.add_error_key: true
+          json.message_key: log
+      
+      # Elasticsearch Output
+      output.elasticsearch:
+        hosts: '${ELASTICSEARCH_HOSTS:elasticsearch:9200}'
+        username: ${ELASTICSEARCH_USERNAME}
+        password: ${ELASTICSEARCH_PASSWORD} 
+      
+      # Kibana
+      setup.kibana:
+        host: ${KIBANA_HOST}
+        username: ${ELASTICSEARCH_USERNAME}
+        password: ${ELASTICSEARCH_PASSWORD} 
+
+      setup.dashboard.enabled: true        
+      # Xpack Monitoring
+      xpack.monitoring:
+        enabled: true
+        elasticsearch:
